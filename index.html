@@ -3,684 +3,618 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NeuralText RLHF — Browser Text Generation AI</title>
-  <!-- Tailwind CSS -->
+  <title>NeuralText — Fast Browser RLHF AI</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            slate: {
-              950: '#090d16',
-            }
-          }
-        }
-      }
-    }
-  </script>
   <style>
-    /* Custom Scrollbar */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    @keyframes pulse-glow {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    .training-pulse { animation: pulse-glow 1.2s infinite ease-in-out; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 99px; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
 
-  <!-- Top Navigation Bar -->
-  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+  <!-- Fullscreen Loading & Boot Overlay with Live Logs -->
+  <div id="loading-overlay" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 transition-opacity duration-300">
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">
-          AI
-        </div>
+        <div class="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
         <div>
-          <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2">
-            NeuralText RLHF
-            <span class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">TF.js LSTM</span>
-          </h1>
-          <p class="text-xs text-slate-400">Self-Correcting Browser Language Model</p>
+          <h2 id="loader-title" class="text-sm font-bold text-white">Initializing Neural Engine</h2>
+          <p id="loader-subtitle" class="text-xs text-slate-400">Starting background AI worker...</p>
         </div>
       </div>
 
-      <!-- Status & Storage Controls -->
-      <div class="flex items-center gap-2 text-xs">
-        <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700 text-slate-300">
-          <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span id="status-text">Ready</span>
+      <!-- Progress Bar -->
+      <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div id="loader-bar" class="h-full bg-indigo-500 transition-all duration-200" style="width: 10%"></div>
+      </div>
+
+      <!-- Live Boot / Training Logs -->
+      <div id="loader-logs" class="bg-slate-950 border border-slate-800/80 rounded-xl p-3 h-36 overflow-y-auto font-mono text-[11px] text-slate-400 space-y-1">
+        <div>[SYS] Preparing background worker thread...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Minimalist Top Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-sm text-white">
+          AI
         </div>
-        <button onclick="exportModelData()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition">
-          Export JSON
-        </button>
-        <button onclick="resetAllMemory()" class="px-3 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/60 text-rose-300 transition">
-          Reset Memory
+        <div>
+          <h1 class="text-sm font-bold text-white leading-tight">NeuralText RLHF</h1>
+          <p class="text-[11px] text-slate-400">Zero-Lag Worker Neural Net</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="worker-badge" class="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+          ● Ready
+        </span>
+        <button onclick="resetMemory()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-rose-950 hover:text-rose-300 border border-slate-700 text-slate-300 transition">
+          Reset
         </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Workspace Grid -->
-  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+  <!-- Main Clean Workspace -->
+  <main class="flex-1 max-w-5xl w-full mx-auto p-4 grid grid-cols-1 md:grid-cols-12 gap-4">
 
-    <!-- Left Panel: Dataset & Training Studio (5 cols) -->
-    <section class="lg:col-span-5 flex flex-col gap-4">
-
-      <!-- Telemetry Cards -->
-      <div class="grid grid-cols-3 gap-2.5">
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div class="text-[11px] text-slate-400 uppercase tracking-wider">Vocab Size</div>
-          <div id="stat-vocab" class="text-xl font-bold text-white mt-0.5">0</div>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div class="text-[11px] text-slate-400 uppercase tracking-wider">Samples</div>
-          <div id="stat-samples" class="text-xl font-bold text-indigo-400 mt-0.5">0</div>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3">
-          <div class="text-[11px] text-slate-400 uppercase tracking-wider">Loss</div>
-          <div id="stat-loss" class="text-xl font-bold text-emerald-400 mt-0.5">—</div>
-        </div>
-      </div>
-
-      <!-- Custom Dataset Input -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-white">1. Training Corpus (Dataset)</h2>
-          <span class="text-xs text-slate-400">1 sentence per line</span>
-        </div>
-
-        <textarea id="dataset-input" rows="6"
-          class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition resize-none font-mono"
-          placeholder="Enter sentences for the AI to learn from..."></textarea>
-
-        <!-- Hyperparameters -->
-        <div class="grid grid-cols-2 gap-3 pt-1">
-          <div>
-            <label class="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Epochs</span>
-              <span id="epochs-val" class="text-slate-200 font-mono">25</span>
-            </label>
-            <input id="epochs-slider" type="range" min="5" max="80" value="25"
-              oninput="document.getElementById('epochs-val').innerText = this.value"
-              class="w-full accent-indigo-500 cursor-pointer" />
-          </div>
-          <div>
-            <label class="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Creativity (Temp)</span>
-              <span id="temp-val" class="text-slate-200 font-mono">0.65</span>
-            </label>
-            <input id="temp-slider" type="range" min="0.2" max="1.4" step="0.05" value="0.65"
-              oninput="document.getElementById('temp-val').innerText = this.value"
-              class="w-full accent-indigo-500 cursor-pointer" />
-          </div>
-        </div>
-
-        <!-- Training Progress Bar -->
-        <div id="progress-container" class="hidden">
-          <div class="flex justify-between text-xs text-slate-400 mb-1">
-            <span id="progress-label">Training neural weights...</span>
-            <span id="progress-pct">0%</span>
-          </div>
-          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div id="progress-bar" class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-150" style="width: 0%"></div>
-          </div>
-        </div>
-
-        <div class="flex gap-2 pt-1">
-          <button id="train-btn" onclick="trainFromTextarea()"
-            class="flex-1 py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.99] text-white font-medium text-sm transition shadow-lg shadow-indigo-600/20">
-            Train & Save Model
-          </button>
-          <button onclick="loadStarterDataset()"
-            class="py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700">
-            Load Starter Data
-          </button>
-        </div>
-      </div>
-
-      <!-- RLHF Reinforcement Log -->
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex-1 flex flex-col min-h-[160px]">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Self-Correction & RLHF Logs</h3>
-          <span id="rlhf-score" class="text-xs font-mono text-emerald-400">Rewards: 0 | Penalties: 0</span>
-        </div>
-        <div id="rlhf-logs" class="flex-1 overflow-y-auto space-y-1.5 text-xs font-mono text-slate-400 max-h-40 pr-1">
-          <div class="text-slate-500">System initialized. Waiting for feedback loop...</div>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- Right Panel: Interactive Generation & Feedback Arena (7 cols) -->
-    <section class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden min-h-[540px]">
-
-      <!-- Arena Header -->
-      <div class="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-900/50">
-        <div>
-          <h2 class="text-sm font-semibold text-white">2. Live Generation & Reinforcement Arena</h2>
-          <p class="text-xs text-slate-400">Rate every AI message with 👍 or 👎 so it self-corrects in real time.</p>
-        </div>
-        <button onclick="generateMessage()"
-          class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white text-xs font-semibold transition shadow-lg shadow-emerald-600/20 flex items-center gap-1.5">
-          <span>⚡ Generate New Message</span>
+    <!-- Left Column: Chat & RLHF Arena (7 cols) -->
+    <section class="md:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl flex flex-col overflow-hidden min-h-[480px]">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-300">AI Output Stream</span>
+        <button onclick="requestGenerate()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-semibold transition">
+          + New Message
         </button>
       </div>
 
-      <!-- Chat / Output Stream -->
-      <div id="chat-stream" class="flex-1 p-4 overflow-y-auto space-y-4">
-        <!-- Messages injected dynamically -->
+      <!-- Messages List -->
+      <div id="chat-stream" class="flex-1 p-4 overflow-y-auto space-y-3"></div>
+
+      <!-- Optional Seed Input -->
+      <form onsubmit="handleSeedSubmit(event)" class="p-3 border-t border-slate-800 bg-slate-950/50 flex gap-2">
+        <input id="seed-input" type="text" placeholder="Type starting words (optional)..."
+          class="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition" />
+        <button type="submit" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold transition">
+          Send
+        </button>
+      </form>
+    </section>
+
+    <!-- Right Column: Dataset & Stats (5 cols) -->
+    <section class="md:col-span-5 flex flex-col gap-4">
+
+      <!-- Clean Stats Row -->
+      <div class="grid grid-cols-3 gap-2">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div class="text-[10px] text-slate-400 uppercase">Words</div>
+          <div id="stat-vocab" class="text-lg font-bold text-white mt-0.5">0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div class="text-[10px] text-slate-400 uppercase">Good / Bad</div>
+          <div id="stat-rlhf" class="text-lg font-bold text-indigo-400 mt-0.5">0 / 0</div>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-center">
+          <div class="text-[10px] text-slate-400 uppercase">Loss</div>
+          <div id="stat-loss" class="text-lg font-bold text-emerald-400 mt-0.5">—</div>
+        </div>
       </div>
 
-      <!-- Seed Prompt Bar -->
-      <div class="p-3 border-t border-slate-800 bg-slate-950/60">
-        <form onsubmit="handleSeedSubmit(event)" class="flex gap-2">
-          <input id="seed-input" type="text"
-            placeholder="Optional starting words (e.g. 'hello', 'system', 'i am')..."
-            class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition" />
-          <button type="submit"
-            class="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition">
-            Generate
-          </button>
-        </form>
+      <!-- Teach Custom Dataset -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex-1 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-semibold text-white">Teach New Sentences (Dataset)</h2>
+          <span class="text-[11px] text-slate-400">1 per line</span>
+        </div>
+
+        <textarea id="dataset-input" rows="7"
+          class="w-full flex-1 bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition resize-none font-mono leading-relaxed"
+          placeholder="Add sentences here..."></textarea>
+
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <span>Creativity: <strong id="temp-label" class="text-slate-200">0.70</strong></span>
+          <input id="temp-slider" type="range" min="0.2" max="1.3" step="0.05" value="0.70"
+            oninput="document.getElementById('temp-label').innerText = parseFloat(this.value).toFixed(2)"
+            class="w-32 accent-indigo-500 cursor-pointer" />
+        </div>
+
+        <button onclick="trainCustomDataset()"
+          class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white text-xs font-semibold transition">
+          Train & Save to Memory
+        </button>
       </div>
 
     </section>
   </main>
 
-  <script>
-    // ==========================================
-    // 1. STATE & STORAGE CONFIGURATION
-    // ==========================================
-    const STORAGE_KEYS = {
-      MODEL: 'localstorage://neuraltext-rlhf-model-v1',
-      META: 'neuraltext_rlhf_meta_v1'
-    };
-
-    const STARTER_CORPUS = [
-      "hello there how are you doing today",
-      "hello friend i am ready to help you build",
-      "i am a neural network running inside your browser",
-      "machine learning gets smarter with every feedback signal",
-      "system status is online and all weights are synced",
-      "coding on mobile with javascript is fast and powerful",
-      "give me good feedback and i will reinforce this pattern",
-      "bad outputs help me adjust my weights and try again",
-      "artificial intelligence learns patterns from your custom dataset",
-      "let us build something awesome together right now"
-    ];
-
-    let state = {
-      corpus: [...STARTER_CORPUS],
-      badExamples: [],
-      word2idx: {},
-      idx2word: {},
-      vocabSize: 0,
-      maxSeqLen: 14,
-      rewards: 0,
-      penalties: 0,
-      lastLoss: null,
-      isTraining: false
-    };
+  <!-- =========================================================
+       BACKGROUND WEB WORKER SCRIPT (ZERO UI LAG)
+       ========================================================= -->
+  <script id="worker-code" type="javascript/worker">
+    importScripts('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
 
     let model = null;
+    let word2idx = {};
+    let idx2word = {};
+    let vocabSize = 0;
+    const MAX_SEQ_LEN = 8;
 
-    // ==========================================
-    // 2. INITIALIZATION & LOCALSTORAGE SYNC
-    // ==========================================
-    window.addEventListener('DOMContentLoaded', async () => {
-      await tf.ready();
-      const loaded = await loadFromLocalStorage();
-      if (!loaded) {
-        document.getElementById('dataset-input').value = state.corpus.join('\n');
-        logRLHF("No saved model found. Bootstrapping initial neural weights...", "info");
-        await trainModel(state.corpus, 22);
-      }
-      updateStatsUI();
-      generateMessage();
-    });
-
-    async function saveToLocalStorage() {
-      if (!model) return;
-      try {
-        await model.save(STORAGE_KEYS.MODEL);
-        const meta = {
-          corpus: state.corpus,
-          badExamples: state.badExamples.slice(-50),
-          word2idx: state.word2idx,
-          idx2word: state.idx2word,
-          vocabSize: state.vocabSize,
-          maxSeqLen: state.maxSeqLen,
-          rewards: state.rewards,
-          penalties: state.penalties,
-          lastLoss: state.lastLoss
-        };
-        localStorage.setItem(STORAGE_KEYS.META, JSON.stringify(meta));
-        logRLHF("Saved model weights & vocabulary to localStorage.", "success");
-      } catch (err) {
-        console.error("Storage save error:", err);
-        logRLHF("Warning: Could not save to localStorage (" + err.message + ")", "warn");
-      }
+    function log(msg) {
+      self.postMessage({ type: 'LOG', msg });
     }
 
-    async function loadFromLocalStorage() {
-      try {
-        const rawMeta = localStorage.getItem(STORAGE_KEYS.META);
-        if (!rawMeta) return false;
-
-        const meta = JSON.parse(rawMeta);
-        model = await tf.loadLayersModel(STORAGE_KEYS.MODEL);
-        model.compile({
-          optimizer: tf.train.adam(0.015),
-          loss: 'sparseCategoricalCrossentropy'
-        });
-
-        state = { ...state, ...meta, isTraining: false };
-        document.getElementById('dataset-input').value = state.corpus.join('\n');
-        logRLHF(`Restored trained model from localStorage (${state.vocabSize} tokens).`, "success");
-        return true;
-      } catch (err) {
-        console.warn("No valid cached model found:", err);
-        return false;
-      }
-    }
-
-    async function resetAllMemory() {
-      if (!confirm("Erase all trained weights, vocabulary, and localStorage data?")) return;
-      localStorage.removeItem(STORAGE_KEYS.META);
-      try { await tf.io.removeModel(STORAGE_KEYS.MODEL); } catch (e) {}
-      state.corpus = [...STARTER_CORPUS];
-      state.badExamples = [];
-      state.rewards = 0;
-      state.penalties = 0;
-      document.getElementById('dataset-input').value = state.corpus.join('\n');
-      document.getElementById('chat-stream').innerHTML = '';
-      logRLHF("Memory wiped. Re-initializing clean model...", "warn");
-      await trainModel(state.corpus, 20);
-      generateMessage();
-    }
-
-    // ==========================================
-    // 3. TOKENIZER & NEURAL NETWORK ARCHITECTURE
-    // ==========================================
     function cleanText(text) {
-      return text
-        .toLowerCase()
-        .replace(/[^a-z0-9'\s]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+      return text.toLowerCase().replace(/[^a-z0-9'\s]/g, '').replace(/\s+/g, ' ').trim();
     }
 
-    function buildVocabulary(sentences) {
-      const specialTokens = ['<PAD>', '<START>', '<END>', '<UNK>'];
-      const wordSet = new Set();
-
-      sentences.forEach(line => {
-        const cleaned = cleanText(line);
-        if (!cleaned) return;
-        cleaned.split(' ').forEach(w => wordSet.add(w));
+    function buildVocab(sentences) {
+      const specials = ['<PAD>', '<START>', '<END>', '<UNK>'];
+      const set = new Set();
+      sentences.forEach(s => {
+        const c = cleanText(s);
+        if (c) c.split(' ').forEach(w => set.add(w));
       });
-
-      const allTokens = [...specialTokens, ...Array.from(wordSet)];
-      state.word2idx = {};
-      state.idx2word = {};
-      allTokens.forEach((tok, idx) => {
-        state.word2idx[tok] = idx;
-        state.idx2word[idx] = tok;
+      const tokens = [...specials, ...Array.from(set)];
+      word2idx = {};
+      idx2word = {};
+      tokens.forEach((t, i) => {
+        word2idx[t] = i;
+        idx2word[i] = t;
       });
-      state.vocabSize = allTokens.length;
+      vocabSize = tokens.length;
     }
 
-    function createNeuralModel(vocabSize, seqLen) {
-      if (model) {
-        model.dispose();
-      }
+    function buildFastModel(vSize) {
+      if (model) model.dispose();
       const m = tf.sequential();
-
-      // Word Embedding Layer
+      // Fast lightweight architecture: Embedding -> Pooling -> Dense
       m.add(tf.layers.embedding({
-        inputDim: vocabSize,
-        outputDim: 24,
-        inputLength: seqLen
+        inputDim: vSize,
+        outputDim: 20,
+        inputLength: MAX_SEQ_LEN
       }));
-
-      // Recurrent LSTM Layer for sequence context
-      m.add(tf.layers.lstm({
-        units: 48,
-        returnSequences: false
-      }));
-
-      // Dense Output Layer over vocabulary
-      m.add(tf.layers.dense({
-        units: vocabSize,
-        activation: 'softmax'
-      }));
-
+      m.add(tf.layers.flatten());
+      m.add(tf.layers.dense({ units: 48, activation: 'relu' }));
+      m.add(tf.layers.dense({ units: vSize, activation: 'softmax' }));
       m.compile({
-        optimizer: tf.train.adam(0.018),
+        optimizer: tf.train.adam(0.02),
         loss: 'sparseCategoricalCrossentropy'
       });
-
       return m;
     }
 
-    function prepareTrainingTensors(sentences) {
+    function makeTensors(sentences) {
       const X = [];
       const y = [];
-
       sentences.forEach(line => {
-        const cleaned = cleanText(line);
-        if (!cleaned) return;
-        const tokens = ['<START>', ...cleaned.split(' '), '<END>'];
-
-        for (let i = 1; i < tokens.length; i++) {
-          const context = tokens.slice(0, i);
-          const target = tokens[i];
-
-          const seq = new Array(state.maxSeqLen).fill(state.word2idx['<PAD>']);
-          const startPos = Math.max(0, state.maxSeqLen - context.length);
-          const trimmedContext = context.slice(-state.maxSeqLen);
-
-          trimmedContext.forEach((tok, idx) => {
-            seq[startPos + idx] = state.word2idx[tok] ?? state.word2idx['<UNK>'];
+        const c = cleanText(line);
+        if (!c) return;
+        const toks = ['<START>', ...c.split(' '), '<END>'];
+        for (let i = 1; i < toks.length; i++) {
+          const ctx = toks.slice(0, i).slice(-MAX_SEQ_LEN);
+          const seq = new Array(MAX_SEQ_LEN).fill(0);
+          const offset = MAX_SEQ_LEN - ctx.length;
+          ctx.forEach((t, idx) => {
+            seq[offset + idx] = word2idx[t] ?? 3;
           });
-
           X.push(seq);
-          y.push(state.word2idx[target] ?? state.word2idx['<UNK>']);
+          y.push(word2idx[toks[i]] ?? 3);
         }
       });
-
       return {
-        xs: tf.tensor2d(X, [X.length, state.maxSeqLen], 'int32'),
+        xs: tf.tensor2d(X, [X.length, MAX_SEQ_LEN], 'int32'),
         ys: tf.tensor1d(y, 'float32')
       };
     }
 
-    // ==========================================
-    // 4. TRAINING ENGINE
-    // ==========================================
-    async function trainFromTextarea() {
-      const raw = document.getElementById('dataset-input').value;
-      const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length === 0) {
-        alert("Please enter at least one sentence in the dataset box.");
-        return;
+    async function exportWeights() {
+      const weightTensors = model.getWeights();
+      const serialized = [];
+      for (let w of weightTensors) {
+        serialized.push({
+          shape: w.shape,
+          data: Array.from(await w.data())
+        });
       }
-      state.corpus = lines;
-      const epochs = parseInt(document.getElementById('epochs-slider').value, 10);
-      await trainModel(state.corpus, epochs);
+      return serialized;
     }
 
-    async function trainModel(sentences, epochs = 20, rebuildVocab = true) {
-      if (state.isTraining) return;
-      state.isTraining = true;
-      setStatus("Training...", "training");
+    async function importWeights(serialized) {
+      const tensors = serialized.map(w => tf.tensor(w.data, w.shape));
+      model.setWeights(tensors);
+      tensors.forEach(t => t.dispose());
+    }
 
-      const progressWrap = document.getElementById('progress-container');
-      const progressBar = document.getElementById('progress-bar');
-      const progressPct = document.getElementById('progress-pct');
-      progressWrap.classList.remove('hidden');
+    function sample(probs, temp) {
+      probs[0] = 0; // no <PAD>
+      probs[1] = 0; // no <START>
+      const logits = probs.map(p => Math.log(Math.max(p, 1e-8)) / temp);
+      const maxL = Math.max(...logits);
+      const exps = logits.map(l => Math.exp(l - maxL));
+      const sum = exps.reduce((a, b) => a + b, 0);
+      const norm = exps.map(e => e / sum);
+      let r = Math.random();
+      for (let i = 0; i < norm.length; i++) {
+        r -= norm[i];
+        if (r <= 0) return i;
+      }
+      return norm.length - 1;
+    }
 
-      try {
-        if (rebuildVocab || !model) {
-          buildVocabulary(sentences);
-          model = createNeuralModel(state.vocabSize, state.maxSeqLen);
+    self.onmessage = async (e) => {
+      const { type, payload } = e.data;
+
+      if (type === 'INIT') {
+        log('[TF.JS] Loading TensorFlow backend in worker...');
+        await tf.ready();
+        log(`[TF.JS] Backend ready (${tf.getBackend()}).`);
+
+        if (payload.savedState) {
+          log('[MEM] Restoring saved vocabulary & weights from localStorage...');
+          word2idx = payload.savedState.word2idx;
+          idx2word = payload.savedState.idx2word;
+          vocabSize = payload.savedState.vocabSize;
+          model = buildFastModel(vocabSize);
+          await importWeights(payload.savedState.weights);
+          log(`[MEM] Restored ${vocabSize} words successfully.`);
+          self.postMessage({
+            type: 'READY',
+            payload: { vocabSize, loss: payload.savedState.loss || '0.45' }
+          });
+        } else {
+          log('[TRAIN] Building initial vocabulary from starter corpus...');
+          buildVocab(payload.corpus);
+          model = buildFastModel(vocabSize);
+          const { xs, ys } = makeTensors(payload.corpus);
+          let lastLoss = 0;
+          await model.fit(xs, ys, {
+            epochs: 22,
+            batchSize: 16,
+            shuffle: true,
+            callbacks: {
+              onEpochEnd: (ep, logs) => {
+                lastLoss = logs.loss.toFixed(3);
+                const pct = Math.round(((ep + 1) / 22) * 100);
+                self.postMessage({ type: 'PROGRESS', pct, msg: `Epoch ${ep + 1}/22 — loss: ${lastLoss}` });
+              }
+            }
+          });
+          xs.dispose(); ys.dispose();
+          const weights = await exportWeights();
+          self.postMessage({
+            type: 'TRAINED',
+            payload: { vocabSize, word2idx, idx2word, weights, loss: lastLoss }
+          });
         }
+      }
 
-        const { xs, ys } = prepareTrainingTensors(sentences);
-
+      if (type === 'TRAIN_FULL') {
+        log('[TRAIN] Rebuilding vocabulary & training on updated dataset...');
+        buildVocab(payload.corpus);
+        model = buildFastModel(vocabSize);
+        const { xs, ys } = makeTensors(payload.corpus);
+        let lastLoss = 0;
         await model.fit(xs, ys, {
-          epochs: epochs,
-          batchSize: Math.min(16, xs.shape[0]),
+          epochs: 25,
+          batchSize: 16,
           shuffle: true,
           callbacks: {
-            onEpochEnd: async (epoch, logs) => {
-              state.lastLoss = logs.loss.toFixed(4);
-              const pct = Math.round(((epoch + 1) / epochs) * 100);
-              progressBar.style.width = pct + '%';
-              progressPct.innerText = pct + '%';
-              document.getElementById('stat-loss').innerText = state.lastLoss;
-              await tf.nextFrame();
+            onEpochEnd: (ep, logs) => {
+              lastLoss = logs.loss.toFixed(3);
+              const pct = Math.round(((ep + 1) / 25) * 100);
+              self.postMessage({ type: 'PROGRESS', pct, msg: `Training step ${ep + 1}/25 — loss: ${lastLoss}` });
             }
           }
         });
-
-        xs.dispose();
-        ys.dispose();
-
-        updateStatsUI();
-        await saveToLocalStorage();
-        logRLHF(`Training complete (${epochs} epochs, loss: ${state.lastLoss}).`, "success");
-      } catch (err) {
-        console.error(err);
-        logRLHF("Training error: " + err.message, "error");
-      } finally {
-        state.isTraining = false;
-        setStatus("Ready", "ready");
-        setTimeout(() => progressWrap.classList.add('hidden'), 1200);
-      }
-    }
-
-    // ==========================================
-    // 5. TEXT GENERATION WITH TEMPERATURE SAMPLING
-    // ==========================================
-    function sampleWithTemperature(probsArray, temperature) {
-      // Penalize <PAD> and <START>
-      probsArray[0] = 0;
-      probsArray[1] = 0;
-
-      const logits = probsArray.map(p => Math.log(Math.max(p, 1e-8)) / temperature);
-      const maxLogit = Math.max(...logits);
-      const exps = logits.map(l => Math.exp(l - maxLogit));
-      const sumExps = exps.reduce((a, b) => a + b, 0);
-      const probs = exps.map(e => e / sumExps);
-
-      let r = Math.random();
-      for (let i = 0; i < probs.length; i++) {
-        r -= probs[i];
-        if (r <= 0) return i;
-      }
-      return probs.length - 1;
-    }
-
-    function generateMessage(seedText = "", tempOverride = null) {
-      if (!model || state.isTraining) return;
-
-      const temperature = tempOverride ?? parseFloat(document.getElementById('temp-slider').value);
-      const cleanedSeed = cleanText(seedText);
-      let generatedTokens = ['<START>'];
-
-      if (cleanedSeed) {
-        generatedTokens.push(...cleanedSeed.split(' '));
-      }
-
-      for (let step = 0; step < 16; step++) {
-        const seq = new Array(state.maxSeqLen).fill(state.word2idx['<PAD>']);
-        const trimmed = generatedTokens.slice(-state.maxSeqLen);
-        const startPos = Math.max(0, state.maxSeqLen - trimmed.length);
-
-        trimmed.forEach((tok, idx) => {
-          seq[startPos + idx] = state.word2idx[tok] ?? state.word2idx['<UNK>'];
+        xs.dispose(); ys.dispose();
+        const weights = await exportWeights();
+        self.postMessage({
+          type: 'TRAINED',
+          payload: { vocabSize, word2idx, idx2word, weights, loss: lastLoss }
         });
-
-        const nextIdx = tf.tidy(() => {
-          const inputTensor = tf.tensor2d([seq], [1, state.maxSeqLen], 'int32');
-          const prediction = model.predict(inputTensor);
-          const probs = Array.from(prediction.dataSync());
-          return sampleWithTemperature(probs, temperature);
-        });
-
-        const nextWord = state.idx2word[nextIdx];
-        if (!nextWord || nextWord === '<END>' || nextWord === '<PAD>') break;
-        generatedTokens.push(nextWord);
       }
 
-      const finalWords = generatedTokens.filter(t => !['<START>', '<END>', '<PAD>', '<UNK>'].includes(t));
-      const outputText = finalWords.length > 0 ? finalWords.join(' ') : "hello i am learning";
+      if (type === 'RLHF_UPDATE') {
+        const { corpus, isGood, text, temp } = payload;
+        const batch = isGood ? [text, text, ...corpus.slice(-5)] : corpus;
+        const { xs, ys } = makeTensors(batch);
+        let lastLoss = 0;
+        await model.fit(xs, ys, {
+          epochs: isGood ? 6 : 8,
+          batchSize: 16,
+          shuffle: true,
+          callbacks: {
+            onEpochEnd: (_, logs) => { lastLoss = logs.loss.toFixed(3); }
+          }
+        });
+        xs.dispose(); ys.dispose();
+        const weights = await exportWeights();
+        self.postMessage({
+          type: 'RLHF_DONE',
+          payload: { weights, loss: lastLoss, nextTemp: isGood ? temp : Math.min(1.3, temp + 0.2) }
+        });
+      }
 
-      appendAIMessage(outputText, cleanedSeed);
-    }
+      if (type === 'GENERATE') {
+        const { seed, temp } = payload;
+        const cleaned = cleanText(seed || '');
+        let toks = ['<START>'];
+        if (cleaned) toks.push(...cleaned.split(' '));
 
-    // ==========================================
-    // 6. RLHF SELF-CORRECTION LOOP (GOOD / BAD)
-    // ==========================================
-    async function handleFeedback(msgId, isGood, text) {
-      const card = document.getElementById(msgId);
-      if (!card || card.dataset.rated === "true") return;
-      card.dataset.rated = "true";
+        for (let i = 0; i < 14; i++) {
+          const ctx = toks.slice(-MAX_SEQ_LEN);
+          const seq = new Array(MAX_SEQ_LEN).fill(0);
+          const offset = MAX_SEQ_LEN - ctx.length;
+          ctx.forEach((t, idx) => { seq[offset + idx] = word2idx[t] ?? 3; });
 
-      const badge = card.querySelector('.feedback-status');
-      const btns = card.querySelectorAll('button');
-      btns.forEach(b => b.disabled = true);
+          const nextIdx = tf.tidy(() => {
+            const inp = tf.tensor2d([seq], [1, MAX_SEQ_LEN], 'int32');
+            const out = model.predict(inp);
+            return sample(Array.from(out.dataSync()), temp);
+          });
 
-      if (isGood) {
-        // POSITIVE REINFORCEMENT
-        state.rewards++;
-        badge.innerHTML = `<span class="text-emerald-400 font-semibold">👍 Reinforced & Learned</span>`;
-        card.classList.add('border-emerald-500/40');
-
-        if (!state.corpus.includes(text)) {
-          state.corpus.push(text);
-          document.getElementById('dataset-input').value = state.corpus.join('\n');
+          const word = idx2word[nextIdx];
+          if (!word || word === '<END>' || word === '<PAD>') break;
+          toks.push(word);
         }
 
-        logRLHF(`👍 Positive reward on: "${text}" -> Reinforcing neural weights...`, "success");
-        // Fine-tune immediately on the approved output + random sample from corpus
-        const sampleBatch = [text, text, ...state.corpus.slice(-4)];
-        await trainModel(sampleBatch, 8, false);
-
-        // Automatically generate next improved message
-        setTimeout(() => generateMessage(), 350);
-
-      } else {
-        // NEGATIVE REINFORCEMENT & SELF-CORRECTION
-        state.penalties++;
-        state.badExamples.push(text);
-        badge.innerHTML = `<span class="text-rose-400 font-semibold">👎 Penalized — Self-Correcting...</span>`;
-        card.classList.add('border-rose-500/40');
-
-        logRLHF(`👎 Negative feedback on: "${text}" -> Re-aligning weights away from bad pattern...`, "warn");
-
-        // Re-train on verified good corpus to overwrite the bad trajectory
-        await trainModel(state.corpus, 10, false);
-
-        // Increase temperature slightly so the next attempt explores a fresh alternative
-        const currentTemp = parseFloat(document.getElementById('temp-slider').value);
-        const explorationTemp = Math.min(1.35, currentTemp + 0.25);
-
-        logRLHF(`Self-correction complete. Generating revised attempt (temp: ${explorationTemp.toFixed(2)})...`, "info");
-        setTimeout(() => generateMessage("", explorationTemp), 350);
+        const result = toks.filter(t => !['<START>', '<END>', '<PAD>', '<UNK>'].includes(t)).join(' ') || 'hello i am learning';
+        self.postMessage({ type: 'GENERATED', payload: { text: result, seed: cleaned } });
       }
+    };
+  </script>
 
-      updateStatsUI();
+  <!-- =========================================================
+       MAIN UI CONTROLLER (LIGHTWEIGHT & RESPONSIVE)
+       ========================================================= -->
+  <script>
+    const STORAGE_KEY = 'neuraltext_fast_worker_v1';
+    const STARTER_DATA = [
+      "hello friend how are you doing today",
+      "i am a fast neural network running in a worker",
+      "give me good feedback and i will learn your style",
+      "bad outputs help me fix my weights automatically",
+      "coding on mobile is fast when heavy math runs in workers",
+      "system is online and ready for your custom dataset",
+      "let us build awesome web apps together right now"
+    ];
+
+    let appState = {
+      corpus: [...STARTER_DATA],
+      goodCount: 0,
+      badCount: 0,
+      vocabSize: 0,
+      loss: '—',
+      word2idx: {},
+      idx2word: {},
+      weights: null
+    };
+
+    // Spawn Web Worker from inline script
+    const workerBlob = new Blob([document.getElementById('worker-code').textContent], { type: 'application/javascript' });
+    const aiWorker = new Worker(URL.createObjectURL(workerBlob));
+
+    // Loading Overlay Helpers
+    function showLoader(title, subtitle) {
+      document.getElementById('loader-title').innerText = title;
+      document.getElementById('loader-subtitle').innerText = subtitle;
+      document.getElementById('loader-bar').style.width = '10%';
+      const overlay = document.getElementById('loading-overlay');
+      overlay.classList.remove('hidden', 'opacity-0');
     }
 
-    // ==========================================
-    // 7. UI HELPERS & EVENT HANDLERS
-    // ==========================================
-    function appendAIMessage(text, seedUsed) {
-      const stream = document.getElementById('chat-stream');
-      const msgId = 'msg-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+    function hideLoader() {
+      const overlay = document.getElementById('loading-overlay');
+      overlay.classList.add('opacity-0');
+      setTimeout(() => overlay.classList.add('hidden'), 280);
+    }
 
-      const wrapper = document.createElement('div');
-      wrapper.id = msgId;
-      wrapper.className = "bg-slate-950 border border-slate-800 rounded-xl p-4 transition-all duration-300 shadow-sm";
+    function appendLoaderLog(text) {
+      const box = document.getElementById('loader-logs');
+      const div = document.createElement('div');
+      div.innerText = text;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
+    }
 
-      const safeText = text.replace(/"/g, '&quot;');
+    function setBadge(busy) {
+      const badge = document.getElementById('worker-badge');
+      if (busy) {
+        badge.className = "text-[11px] px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium";
+        badge.innerText = "● Thinking...";
+      } else {
+        badge.className = "text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium";
+        badge.innerText = "● Ready";
+      }
+    }
 
-      wrapper.innerHTML = `
-        <div class="flex items-center justify-between gap-2 mb-2">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-semibold text-indigo-400">NeuralText AI</span>
-            ${seedUsed ? `<span class="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">seed: "${seedUsed}"</span>` : ''}
-          </div>
-          <span class="feedback-status text-xs text-slate-500">Awaiting feedback</span>
-        </div>
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {
+        console.warn("LocalStorage full or blocked:", e);
+      }
+    }
 
-        <p class="text-base text-slate-100 leading-relaxed font-medium mb-3">"${text}"</p>
+    function updateStats() {
+      document.getElementById('stat-vocab').innerText = appState.vocabSize;
+      document.getElementById('stat-rlhf').innerText = `${appState.goodCount} / ${appState.badCount}`;
+      document.getElementById('stat-loss').innerText = appState.loss;
+    }
 
-        <div class="flex items-center gap-2 pt-2 border-t border-slate-800/80">
-          <button onclick="handleFeedback('${msgId}', true, '${safeText}')"
-            class="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer">
-            <span>👍 Good Output</span>
-          </button>
-          <button onclick="handleFeedback('${msgId}', false, '${safeText}')"
-            class="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer">
-            <span>👎 Bad Output (Fix)</span>
-          </button>
-        </div>
-      `;
+    // Worker Message Router
+    aiWorker.onmessage = (e) => {
+      const { type, payload, pct, msg } = e.data;
 
-      stream.appendChild(wrapper);
-      stream.scrollTop = stream.scrollHeight;
+      if (type === 'LOG') {
+        appendLoaderLog(msg);
+      }
+
+      if (type === 'PROGRESS') {
+        document.getElementById('loader-bar').style.width = pct + '%';
+        appendLoaderLog(`[TRAIN] ${msg}`);
+      }
+
+      if (type === 'READY') {
+        appState.vocabSize = payload.vocabSize;
+        appState.loss = payload.loss;
+        updateStats();
+        hideLoader();
+        requestGenerate();
+      }
+
+      if (type === 'TRAINED') {
+        appState.vocabSize = payload.vocabSize;
+        appState.word2idx = payload.word2idx;
+        appState.idx2word = payload.idx2word;
+        appState.weights = payload.weights;
+        appState.loss = payload.loss;
+        saveState();
+        updateStats();
+        appendLoaderLog('[MEM] Saved weights to localStorage.');
+        setTimeout(() => {
+          hideLoader();
+          requestGenerate();
+        }, 300);
+      }
+
+      if (type === 'RLHF_DONE') {
+        appState.weights = payload.weights;
+        appState.loss = payload.loss;
+        saveState();
+        updateStats();
+        setBadge(false);
+        requestGenerate('', payload.nextTemp);
+      }
+
+      if (type === 'GENERATED') {
+        setBadge(false);
+        renderMessageCard(payload.text, payload.seed);
+      }
+    };
+
+    // Boot Sequence
+    window.addEventListener('DOMContentLoaded', () => {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      let saved = null;
+      if (raw) {
+        try {
+          saved = JSON.parse(raw);
+          appState = { ...appState, ...saved };
+          appendLoaderLog('[MEM] Found saved AI model in localStorage.');
+        } catch (e) {}
+      }
+      document.getElementById('dataset-input').value = appState.corpus.join('\n');
+      aiWorker.postMessage({
+        type: 'INIT',
+        payload: { corpus: appState.corpus, savedState: saved?.weights ? saved : null }
+      });
+    });
+
+    // User Actions
+    function requestGenerate(seed = '', tempOverride = null) {
+      setBadge(true);
+      const temp = tempOverride ?? parseFloat(document.getElementById('temp-slider').value);
+      aiWorker.postMessage({ type: 'GENERATE', payload: { seed, temp } });
     }
 
     function handleSeedSubmit(e) {
       e.preventDefault();
-      const input = document.getElementById('seed-input');
-      const val = input.value.trim();
-      generateMessage(val);
-      input.value = '';
+      const inp = document.getElementById('seed-input');
+      requestGenerate(inp.value.trim());
+      inp.value = '';
     }
 
-    function loadStarterDataset() {
-      document.getElementById('dataset-input').value = STARTER_CORPUS.join('\n');
-      logRLHF("Loaded default starter dataset into editor.", "info");
+    function trainCustomDataset() {
+      const lines = document.getElementById('dataset-input').value
+        .split('\n').map(l => l.trim()).filter(Boolean);
+      if (!lines.length) return alert('Add at least one sentence first.');
+      appState.corpus = lines;
+      document.getElementById('loader-logs').innerHTML = '';
+      showLoader('Training Neural Network', 'Updating vocabulary & weights in background...');
+      aiWorker.postMessage({ type: 'TRAIN_FULL', payload: { corpus: appState.corpus } });
     }
 
-    function updateStatsUI() {
-      document.getElementById('stat-vocab').innerText = state.vocabSize;
-      document.getElementById('stat-samples').innerText = state.corpus.length;
-      document.getElementById('stat-loss').innerText = state.lastLoss ?? '—';
-      document.getElementById('rlhf-score').innerText = `Rewards: ${state.rewards} | Penalties: ${state.penalties}`;
-    }
+    function rateOutput(cardId, isGood, text) {
+      const card = document.getElementById(cardId);
+      if (!card || card.dataset.done) return;
+      card.dataset.done = '1';
 
-    function setStatus(text, mode) {
-      const dot = document.getElementById('status-dot');
-      const label = document.getElementById('status-text');
-      label.innerText = text;
-      if (mode === 'training') {
-        dot.className = "w-2 h-2 rounded-full bg-amber-400 training-pulse";
+      card.querySelectorAll('button').forEach(b => b.remove());
+      const tag = card.querySelector('.status-tag');
+
+      if (isGood) {
+        appState.goodCount++;
+        tag.innerHTML = `<span class="text-emerald-400 font-semibold">👍 Learned</span>`;
+        if (!appState.corpus.includes(text)) {
+          appState.corpus.push(text);
+          document.getElementById('dataset-input').value = appState.corpus.join('\n');
+        }
       } else {
-        dot.className = "w-2 h-2 rounded-full bg-emerald-400";
+        appState.badCount++;
+        tag.innerHTML = `<span class="text-rose-400 font-semibold">👎 Self-Correcting</span>`;
       }
+
+      updateStats();
+      setBadge(true);
+      const temp = parseFloat(document.getElementById('temp-slider').value);
+      aiWorker.postMessage({
+        type: 'RLHF_UPDATE',
+        payload: { corpus: appState.corpus, isGood, text, temp }
+      });
     }
 
-    function logRLHF(message, type = "info") {
-      const container = document.getElementById('rlhf-logs');
-      const line = document.createElement('div');
-      const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    function renderMessageCard(text, seed) {
+      const stream = document.getElementById('chat-stream');
+      const id = 'msg-' + Date.now() + Math.random().toString(36).slice(2, 6);
+      const safeText = text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
-      let color = "text-slate-400";
-      if (type === "success") color = "text-emerald-400";
-      if (type === "warn") color = "text-amber-400";
-      if (type === "error") color = "text-rose-400";
-
-      line.className = color;
-      line.innerText = `[${time}] ${message}`;
-      container.appendChild(line);
-      container.scrollTop = container.scrollHeight;
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = "bg-slate-950/90 border border-slate-800 rounded-xl p-3.5 space-y-2.5";
+      div.innerHTML = `
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-indigo-400 font-semibold">AI ${seed ? `· "${seed}"` : ''}</span>
+          <span class="status-tag text-slate-500">Rate output</span>
+        </div>
+        <p class="text-sm text-slate-100 leading-relaxed">${text}</p>
+        <div class="flex gap-2 pt-1">
+          <button onclick="rateOutput('${id}', true, '${safeText}')"
+            class="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-300 text-xs font-medium transition">
+            👍 Good
+          </button>
+          <button onclick="rateOutput('${id}', false, '${safeText}')"
+            class="px-3 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 text-xs font-medium transition">
+            👎 Bad
+          </button>
+        </div>
+      `;
+      stream.appendChild(div);
+      stream.scrollTop = stream.scrollHeight;
     }
 
-    function exportModelData() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
-        corpus: state.corpus,
-        vocabSize: state.vocabSize,
-        rewards: state.rewards,
-        penalties: state.penalties
-      }, null, 2));
-      const a = document.createElement('a');
-      a.href = dataStr;
-      a.download = "neuraltext-dataset.json";
-      a.click();
+    function resetMemory() {
+      if (!confirm('Reset all learned weights and custom dataset?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      appState = {
+        corpus: [...STARTER_DATA],
+        goodCount: 0,
+        badCount: 0,
+        vocabSize: 0,
+        loss: '—',
+        word2idx: {},
+        idx2word: {},
+        weights: null
+      };
+      document.getElementById('dataset-input').value = appState.corpus.join('\n');
+      document.getElementById('chat-stream').innerHTML = '';
+      document.getElementById('loader-logs').innerHTML = '';
+      showLoader('Resetting AI Memory', 'Rebuilding clean model...');
+      aiWorker.postMessage({ type: 'INIT', payload: { corpus: appState.corpus, savedState: null } });
     }
   </script>
 </body>
